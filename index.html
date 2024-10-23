@@ -3,113 +3,312 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>최윤성은 흑인이다</title>
+    <title>청각장애인을 위한 사이렌, 경적 알림 제작 매뉴얼</title>
     <style>
-        /* 기본 스타일 */
-        body {
+        /* Reset CSS */
+        * {
             margin: 0;
             padding: 0;
-            height: 100vh;
-            background-color: black;
-            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f0f5f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            opacity: 0;
+            animation: fadeIn 1.5s ease-in-out forwards;
+        }
+
+        /* 애니메이션 */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* 헤더 스타일 */
+        header {
+            background: linear-gradient(135deg, #6a82fb, #fc5c7d);
+            color: #fff;
+            padding: 70px 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        header h1 {
+            font-size: 3.5em;
+            font-weight: 700;
+            margin-bottom: 20px;
+            letter-spacing: 1.5px;
+        }
+
+        header p {
+            font-size: 1.5em;
+            font-weight: 300;
+            margin-top: 15px;
+        }
+
+        /* 네비게이션 스타일 */
+        nav {
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        nav ul {
+            list-style: none;
             display: flex;
             justify-content: center;
-            align-items: center;
+            padding: 15px 0;
         }
 
-        .text {
-            position: absolute;
-            font-weight: bold;
-            font-size: 3rem;
-            animation: rainbowText 0.06s infinite;
+        nav ul li {
+            margin: 0 20px;
         }
 
-        /* 무지개색 애니메이션 */
-        @keyframes rainbowText {
-            0% { color: red; }
-            16% { color: orange; }
-            32% { color: yellow; }
-            48% { color: green; }
-            64% { color: blue; }
-            80% { color: indigo; }
-            100% { color: violet; }
+        nav ul li a {
+            color: #6a82fb;
+            text-decoration: none;
+            font-size: 1.2em;
+            font-weight: 600;
+            padding: 5px 10px;
+            transition: color 0.3s ease, border-bottom 0.3s ease;
+        }
+
+        nav ul li a:hover {
+            color: #fc5c7d;
+            border-bottom: 2px solid #fc5c7d;
+        }
+
+        /* 메인 콘텐츠 스타일 */
+        .container {
+            flex: 1;
+            width: 85%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 0;
+        }
+
+        .content-section {
+            background-color: #ffffff;
+            padding: 40px;
+            margin-bottom: 40px;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .content-section:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        h2 {
+            color: #6a82fb;
+            font-size: 2.2em;
+            margin-bottom: 20px;
+            font-weight: 700;
+            text-transform: uppercase;
+            border-bottom: 2px solid #fc5c7d;
+            display: inline-block;
+            padding-bottom: 5px;
+        }
+
+        h3 {
+            color: #333;
+            margin-top: 30px;
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+
+        ol, ul {
+            margin: 20px 0;
+            padding-left: 20px;
+            line-height: 1.7;
+        }
+
+        ol li, ul li {
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        pre {
+            background-color: #f7f9fc;
+            padding: 15px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+
+        code {
+            background-color: #eef2f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1em;
+            color: #333;
+        }
+
+        /* 푸터 스타일 */
+        footer {
+            background-color: #6a82fb;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            bottom: 0;
+            width: 100%;
+            margin-top: auto;
+        }
+
+        footer p {
+            margin: 0;
+            font-size: 1em;
+        }
+
+        footer p:hover {
+            color: #dcdcdc;
+        }
+
+        /* 미디어 쿼리 */
+        @media (max-width: 768px) {
+            nav ul {
+                flex-direction: column;
+                padding: 10px 0;
+            }
+
+            nav ul li {
+                margin: 10px 0;
+            }
+
+            .content-section {
+                padding: 30px;
+            }
+
+            h2 {
+                font-size: 1.75em;
+            }
+
+            h3 {
+                font-size: 1.25em;
+            }
         }
     </style>
 </head>
 <body>
+    <header>
+        <h1>청각장애인을 위한 사이렌, 경적 알림 제작 매뉴얼</h1>
+        <p>송성재, 유승호, 박시윤, 엄찬용, 이재희</p>
+    </header>
+    
+    <nav>
+        <ul id="nav-tabs">
+            <li><a href="#section1">라즈베리파이 OS 설치</a></li>
+            <li><a href="#section2">하드웨어 설정</a></li>
+            <li><a href="#section3">모델 준비</a></li>
+            <li><a href="#section4">코드 및 라이브러리 설치</a></li>
+        </ul>
+    </nav>
 
-    <!-- 30개의 텍스트 요소 생성 -->
-    <div id="container"></div>
+    <main class="container">
+        <section id="section1" class="content-section">
+            <h2>1. 라즈베리파이 5 우분투 설치</h2>
 
-    <!-- 매우 시끄러운 소리 재생 -->
-    <audio id="audio" autoplay loop>
-        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mp3">
-    </audio>
+            <h3>1.1 라즈베리파이 OS 설치 준비</h3>
+            <p>이 섹션에서는 라즈베리파이 5에 우분투를 설치하는 방법을 설명합니다. 준비물로는 라즈베리파이 5 보드, 마이크로 SD 카드(최소 16GB), 전원 어댑터, 모니터, 키보드, 마우스가 필요합니다.</p>
 
-    <script>
-        const container = document.getElementById('container');
-        const screenWidth = window.innerWidth;
-        const screenHeight = window.innerHeight;
+            <h3>1.2 우분투 이미지 다운로드 및 SD 카드 준비</h3>
+            <ol>
+                <li><strong>우분투 이미지를 다운로드:</strong> 우분투 공식 웹사이트에서 Raspberry Pi 용 우분투 이미지를 다운로드합니다. Raspberry Pi 5에 적합한 버전을 선택하세요.</li>
+                <li><strong>Raspberry Pi Imager 설치:</strong> <a href="https://www.raspberrypi.org/downloads/" target="_blank">Raspberry Pi Imager</a>를 다운로드하고 설치합니다.</li>
+                <li><strong>SD 카드에 이미지 굽기:</strong> Raspberry Pi Imager를 실행한 후, 다운로드한 우분투 이미지를 선택하고 SD 카드에 굽습니다.</li>
+            </ol>
 
-        // 텍스트 개수
-        const textCount = 30;
+            <h3>1.3 라즈베리파이 부팅 및 초기 설정</h3>
+            <ol>
+                <li><strong>SD 카드 삽입:</strong> 이미지를 굽는 것이 완료되면 SD 카드를 라즈베리파이에 삽입합니다.</li>
+                <li><strong>전원 연결 및 부팅:</strong> 라즈베리파이에 전원을 연결하여 부팅합니다. 첫 부팅 시 우분투 설정 화면이 나타납니다.</li>
+                <li><strong>네트워크 설정:</strong> Wi-Fi 또는 유선 인터넷을 통해 라즈베리파이를 네트워크에 연결합니다.</li>
+                <li><strong>언어 및 시간대 설정:</strong> 언어 및 시간대를 설정하고, 필요한 경우 키보드 레이아웃도 선택합니다.</li>
+                <li><strong>업데이트 수행:</strong> 터미널을 열어 최신 소프트웨어 업데이트를 수행합니다. 명령어는 다음과 같습니다:</li>
+                <pre><code>sudo apt update && sudo apt upgrade -y</code></pre>
+            </ol>
+        </section>
 
-        // 텍스트 생성 및 초기 설정
-        for (let i = 0; i < textCount; i++) {
-            const textElement = document.createElement('div');
-            textElement.classList.add('text');
-            textElement.innerText = '최윤성은 흑인이다';
-            textElement.style.left = Math.random() * screenWidth + 'px';
-            textElement.style.top = Math.random() * screenHeight + 'px';
-            container.appendChild(textElement);
-        }
+        <section id="section2" class="content-section">
+            <h2>2. 하드웨어 설정</h2>
 
-        const texts = document.querySelectorAll('.text');
+            <h3>2.1 하드웨어 부품 목록</h3>
+            <ul>
+                <li>라즈베리파이 5</li>
+                <li>RGB LED 스트립 (5V용)</li>
+                <li>NPN 트랜지스터 3개 (예: 2N2222)</li>
+                <li>330Ω 저항 3개</li>
+                <li>브레드보드</li>
+                <li>점퍼 케이블 (암/수)</li>
+                <li>마이크로 USB 마이크 (사운드 입력용)</li>
+            </ul>
 
-        // 각 텍스트의 위치 및 속도 설정
-        const textData = Array.from(texts).map(text => ({
-            element: text,
-            posX: Math.random() * screenWidth,
-            posY: Math.random() * screenHeight,
-            velocityX: (Math.random() * 4 - 2),  // X축 이동 속도 (-2 ~ 2)
-            velocityY: (Math.random() * 4 - 2),  // Y축 이동 속도 (-2 ~ 2)
-        }));
+            <h3>2.2 하드웨어 배선 연결</h3>
+            <p>RGB LED 스트립과 트랜지스터를 라즈베리파이에 연결합니다. 아래는 각 연결 방법입니다:</p>
+            <ol>
+                <li><strong>라즈베리파이 GPIO 핀 설정:</strong> GPIO 17 (Red LED), GPIO 22 (Green LED), GPIO 27 (Blue LED) 핀을 사용합니다.</li>
+                <li><strong>트랜지스터와 저항 연결:</strong> 330Ω 저항을 각 트랜지스터의 베이스(Base) 핀과 라즈베리파이의 해당 GPIO 핀 사이에 연결합니다. 트랜지스터의 컬렉터(Collector) 핀을 RGB LED 스트립의 각 색상 채널(R, G, B)에 연결하고, 이미터(Emitter) 핀을 GND에 연결합니다.</li>
+                <li><strong>RGB LED 스트립 연결:</strong> RGB LED 스트립의 VCC 핀을 라즈베리파이의 5V 핀에, GND 핀을 라즈베리파이의 GND 핀에 연결합니다.</li>
+            </ol>
+        </section>
 
-        function moveTexts() {
-            textData.forEach(data => {
-                data.posX += data.velocityX;
-                data.posY += data.velocityY;
+        <section id="section3" class="content-section">
+            <h2>3. 머신러닝 모델 준비 (TensorFlow Lite)</h2>
 
-                // 화면의 좌우 끝에 닿으면 X축 반전
-                if (data.posX + data.element.offsetWidth >= screenWidth || data.posX <= 0) {
-                    data.velocityX = -data.velocityX;
-                }
+            <h3>3.1 티처블 머신에서 모델 생성</h3>
+            <p>티처블 머신을 사용하여 사운드 인식 모델을 생성합니다. 아래 단계에 따라 진행합니다:</p>
+            <ol>
+                <li><strong>티처블 머신 웹사이트 접속:</strong> <a href="https://teachablemachine.withgoogle.com/" target="_blank">Teachable Machine</a>에 접속합니다.</li>
+                <li><strong>프로젝트 생성:</strong> 'Audio Project'를 선택한 후 'Standard' 모델 타입을 선택합니다.</li>
+                <li><strong>데이터 수집:</strong> 'Background Noise', 'Horn', 'Siren' 등의 클래스를 추가하고, 학습 데이터 수집을 위해 소리를 녹음하거나 업로드합니다.</li>
+                <li><strong>모델 학습:</strong> 데이터 수집이 완료되면 'Train Model'을 클릭하여 모델을 학습시킵니다.</li>
+                <li><strong>모델 내보내기:</strong> 학습이 완료된 모델을 'TensorFlow Lite' 형식으로 내보내고, 'Download My Model'을 클릭하여 `.tflite` 모델 파일과 레이블 파일(`.txt`)을 다운로드합니다.</li>
+            </ol>
 
-                // 화면의 상하 끝에 닿으면 Y축 반전
-                if (data.posY + data.element.offsetHeight >= screenHeight || data.posY <= 0) {
-                    data.velocityY = -data.velocityY;
-                }
+            <h3>3.2 모델 파일 라즈베리파이로 전송</h3>
+            <p>다운로드한 `.tflite` 모델 파일과 레이블 파일을 SCP(Secure Copy Protocol) 등을 사용하여 라즈베리파이로 전송합니다:</p>
+            <pre><code>scp soundclassifier_with_metadata.tflite pi@<라즈베리파이_IP>:/home/pi/</code></pre>
+            <pre><code>scp labels.txt pi@<라즈베리파이_IP>:/home/pi/</code></pre>
+        </section>
 
-                // 새로운 위치로 이동
-                data.element.style.left = data.posX + 'px';
-                data.element.style.top = data.posY + 'px';
-            });
-        }
+        <section id="section4" class="content-section">
+            <h2>4. 코드 및 라이브러리 설치</h2>
 
-        // 0.01초마다 위치를 업데이트
-        setInterval(moveTexts, 10);
+            <h3>4.1 필요한 파이썬 라이브러리 설치</h3>
+            <p>라즈베리파이에서 사운드 인식과 LED 제어를 위해 필요한 라이브러리를 설치합니다:</p>
+            <ul>
+                <li>pip 설치: <code>sudo apt install python3-pip</code></li>
+                <li>필요한 라이브러리 설치: <code>pip3 install numpy tensorflow pyaudio gpiozero</code></li>
+                <li>tkinter 설치: <code>sudo apt-get install python3-tk</code></li>
+            </ul>
 
-        // 자동 재생 설정 (자동으로 시작되도록 무음으로 플레이 후 소리 활성화)
-        window.addEventListener('load', function () {
-            const audio = document.getElementById('audio');
-            audio.muted = true;  // 먼저 무음으로 플레이 시작
-            audio.play().then(() => {
-                audio.muted = false;  // 이후 소리 활성화
-            }).catch(error => {
-                console.log("자동 재생이 차단되었습니다:", error);
-            });
-        });
-    </script>
+            <h3>4.2 파이썬 코드 실행</h3>
+            <p>아래는 RGB LED 제어와 사운드 인식을 위한 최종 파이썬 코드입니다. 이 코드를 사용하여 모델이 올바르게 예측하고 LED를 제어할 수 있는지 확인합니다.</p>
+            <p>Python 스크립트를 실행하려면 터미널에서 다음 명령어를 입력합니다:</p>
+            <pre><code>python3 sound_led_control.py</code></pre>
+            <p>배경 소음, 경적 소리, 사이렌 소리 등 다양한 소리를 재생하여 모델이 올바르게 예측하고 LED를 제어하는지 테스트합니다.</p>
+        </section>
+    </main>
 
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 MAKER SCHOOL. All rights reserved.</p>
+        </div>
+    </footer>
 </body>
 </html>
