@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>재활 자세 데모 (MoveNet + 다중 동작 + 표본 매칭)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box }
+  body { margin:0; background:#0b111a; color:#e9eef5; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif }
+  a { color:#9ecbff; text-decoration:none }
+  header {
+    padding:16px;
+    background: linear-gradient(90deg, #0f172a, #0b3d5c 60%, #0f172a);
+    border-bottom: 1px solid #1c2737;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .header-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+  .brand { font-weight:800; letter-spacing:.2px; }
+  .chip { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px;
+          background:#152033; border:1px solid #263855; color:#9ecbff; font-weight:600; }
+  .container { max-width:1100px; margin:18px auto; padding:0 16px }
+  .grid { display:grid; grid-template-columns: 1fr 320px; gap:16px }
+  @media (max-width: 980px){ .grid { grid-template-columns: 1fr } }
+  .card { background:#0f1623; border:1px solid #1f2b40; border-radius:16px; box-shadow: 0 6px 16px rgba(0,0,0,.25) }
+  .card-body { padding:14px }
+  #video { display:none } /* 비디오는 숨기고 캔버스만 노출 */
+  #canvas { width: 720px; height: 405px; max-width:100%; aspect-ratio: 16/9;
+            background:#000; border-radius:14px; display:block; margin:0 auto; }
+  .status { padding:8px 12px; border-radius:10px; font-weight:700; border:1px solid transparent }
+  .ok { background:#0f2b20; color:#77ffb0; border-color:#1e7b55 }
+  .warn { background:#2a1a0f; color:#ffce77; border-color:#7b551e }
+  .bad { background:#2b0f1a; color:#ff77a1; border-color:#7b1e3c }
+  .ghost { background:#121a28; color:#b9c7da; border-color:#28364d }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+  .row-spread { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap }
+  .stack { display:flex; flex-direction:column; gap:10px }
+  .btn { cursor:pointer; padding:8px 12px; border-radius:10px; border:1px solid #2a3b58; background:#152033; color:#cfe2ff; font-weight:600 }
+  .btn:hover { filter: brightness(1.1) }
+  select, .btn-inline {
+    padding:8px 12px; border-radius:10px; border:1px solid #2a3b58; background:#0f1a2a; color:#d9e7ff; font-weight:600
+  }
+  label { font-size:12px; color:#93a7c4 }
+  .muted { color:#9fb0c3; font-size:13px }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; color:#b9c7da }
+  .count { padding:2px 8px; border-radius:999px; background:#132038; border:1px solid #2b4777; color:#9ecbff; font-weight:700; }
+
+  /* ====== 하단 꾸미기 ====== */
+  .footer-wrap { margin-top:18px }
+  .wave {
+    height: 70px; border-radius:14px; background:
+      radial-gradient(1200px 70px at 50% -40px, #143055, transparent 60%),
+      linear-gradient(90deg,#0e2238,#0b1c2c 60%,#0e2238);
+    border:1px solid #1f2b40;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .footer {
+    display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px;
+  }
+  @media (max-width: 720px){ .footer { grid-template-columns: 1fr } }
+  .tip { background:#0f1623; border:1px dashed #274266; border-radius:14px; padding:12px }
+  .tip h4 { margin:0 0 6px; font-size:14px; color:#cfe2ff }
+  .tip ul { margin:6px 0 0 18px }
+  .credit { background:#0f1623; border:1px solid #1f2b40; border-radius:14px; padding:12px; display:flex; justify-content:space-between; align-items:center }
+  .tag { padding:4px 8px; border-radius:999px; background:#111b2a; border:1px solid #233551; color:#9ecbff; font-weight:700; }
+
+  /* ====== 모바일 차단 오버레이 ====== */
+  #mobileBlock {
+    position: fixed; inset: 0; display:none; z-index: 9999;
+    background: rgba(5,10,16,.9);
+    backdrop-filter: blur(6px);
+    align-items: center; justify-content:center;
+  }
+  #mobileCard {
+    width:min(520px, 92vw);
+    background:#0f1623; border:1px solid #2a3b58; border-radius:16px;
+    padding:18px; text-align:center; box-shadow: 0 8px 32px rgba(0,0,0,.45);
+  }
+  #mobileCard h2 { margin:0 0 8px; }
+  #mobileCard p { margin:0; color:#b9c7da }
+</style>
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <div class="brand chip">MoveNet (TF.js)</div>
+      <div id="status" class="status ghost">초기화 중…</div>
+      <div style="flex:1"></div>
+      <div class="muted">단축키: <b>G</b> 좋은 샘플 · <b>B</b> 나쁜 샘플 · <b>R</b> 초기화</div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="grid">
+      <!-- 영상 영역 -->
+      <div class="card">
+        <div class="card-body">
+          <video id="video" playsinline muted></video>
+          <canvas id="canvas" width="720" height="405"></canvas>
+        </div>
+      </div>
+
+      <!-- 우측 패널 -->
+      <div class="card">
+        <div class="card-body stack">
+          <div class="row-spread">
+            <div>
+              <label for="exercise">운동 선택</label><br/>
+              <select id="exercise">
+                <option value="squat">스쿼트</option>
+                <option value="lunge">런지</option>
+                <option value="arm_raise">팔 올리기</option>
+                <option value="knee_ext">무릎 신전</option>
+              </select>
+            </div>
+            <div class="row" style="gap:6px">
+              <div class="count" title="좋은 샘플">G: <span id="cnt-good">0</span></div>
+              <div class="count" title="나쁜 샘플">B: <span id="cnt-bad">0</span></div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="row">
+              <button class="btn" id="btn-good">좋은 샘플 저장 (G)</button>
+              <button class="btn" id="btn-bad">나쁜 샘플 저장 (B)</button>
+              <button class="btn-inline" id="btn-reset">초기화 (R)</button>
+            </div>
+            <div class="muted">설명: 카메라 → <b>MoveNet</b> 17 키포인트 → 동작별 <b>관절각 특징</b> → 저장된 샘플과 유사도 비교 → 피드백.</div>
+            <div class="mono" id="debug"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== 하단 꾸미기/정보 ====== -->
+    <div class="footer-wrap">
+      <div class="wave"></div>
+      <div class="footer">
+        <div class="tip">
+          <h4>데모 팁</h4>
+          <ul class="muted">
+            <li>프레임에 <b>한 명만</b> 나오게 해주세요. 여러 명 감지 시 판정을 멈춥니다.</li>
+            <li>전신(머리~발목)이 보이도록 <b>1.5~2m</b> 뒤로 물러서서 촬영하세요.</li>
+            <li><b>G/B</b>로 각 5~10장 샘플을 저장하면 판정이 안정적입니다.</li>
+          </ul>
+        </div>
+        <div class="credit">
+          <div class="muted">운동: <span class="tag" id="ex-tag">스쿼트</span></div>
+          <div class="muted"><a href="#" title="내 로컬 저장소에 저장됩니다.">샘플은 로컬 저장(localStorage)</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모바일 차단 오버레이 -->
+  <div id="mobileBlock">
+    <div id="mobileCard">
+      <h2>해당 서비스는 현재 <span style="color:#9ecbff">PC</span>로만 사용 가능합니다</h2>
+      <p class="muted">불편을 드려 죄송합니다. 데스크톱/노트북에서 접속해 주세요.</p>
+    </div>
+  </div>
+
+  <!-- TF.js & Pose Detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+  <script>
+  // ================== 모바일 접속 차단 ==================
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+                || window.matchMedia('(max-width: 768px)').matches
+                || window.matchMedia('(pointer:coarse)').matches;
+  if (isMobile) {
+    const overlay = document.getElementById('mobileBlock');
+    overlay.style.display = 'flex';
+  }
+
+  // ================== 설정 ==================
+  const MODEL = poseDetection.SupportedModels.MoveNet;
+  // 여러 명 감지 여부 판단을 위해 MultiPose 사용
+  const DETECTOR_CONFIG = { modelType: 'MultiPose.Lightning' };
+  const CONF_THR = 0.2;      // 키포인트 신뢰도 임계
+  const MAX_SAMPLES = 250;   // 동작별 저장 한도
+  const THR_GOOD = 8.0;      // GOOD 임계(평균절대오차, 도)
+  const MARGIN   = 2.0;      // GOOD이 BAD보다 이만큼 더 가까워야 GOOD
+  const MAX_POSES = 4;       // 동시에 감지 최대 인원
+
+  // ================== 각도/특징 유틸 ==================
+  const KP = { NOSE:0, L_EYE:1, R_EYE:2, L_EAR:3, R_EAR:4, L_SHO:5, R_SHO:6, L_ELB:7, R_ELB:8, L_WR:9, R_WR:10, L_HIP:11, R_HIP:12, L_KNEE:13, R_KNEE:14, L_ANK:15, R_ANK:16 };
+  const MAE = (a,b)=>a.reduce((s,v,i)=>s+Math.abs(v-b[i]),0)/a.length;
+
+  function sel(kps, idx){
+    const p = kps[idx]; const s = p?.score ?? p?.confidence ?? 0;
+    if (s < CONF_THR) return null;
+    return { x:p.x, y:p.y, score:s };
+  }
+  function degAngle(a,b,c){
+    if(!a||!b||!c) return null;
+    const v1=[a.x-b.x,a.y-b.y], v2=[c.x-b.x,c.y-b.y];
+    const n1=Math.hypot(...v1), n2=Math.hypot(...v2); if(!n1||!n2) return null;
+    let cos=(v1[0]*v2[0]+v1[1]*v2[1])/(n1*n2); cos=Math.max(-1,Math.min(1,cos));
+    return Math.acos(cos)*180/Math.PI;
+  }
+  function torsoIncline(shoulder, hip){
+    if(!shoulder||!hip) return null;
+    const vx=hip.x-shoulder.x, vy=hip.y-shoulder.y, n=Math.hypot(vx,vy); if(!n) return null;
+    let cos=(0*vx+1*vy)/n; cos=Math.max(-1,Math.min(1,cos));
+    return Math.acos(cos)*180/Math.PI; // 0=수직, 커질수록 숙임
+  }
+
+  // 동작별 특징 추출기
+  function featuresByExercise(ex, kps){
+    const LE=sel(kps,KP.L_SHO), RE=sel(kps,KP.R_SHO);
+    const LH=sel(kps,KP.L_HIP), RH=sel(kps,KP.R_HIP);
+    const LK=sel(kps,KP.L_KNEE), RK=sel(kps,KP.R_KNEE);
+    const LA=sel(kps,KP.L_ANK),  RA=sel(kps,KP.R_ANK);
+    const LW=sel(kps,KP.L_WR),   RW=sel(kps,KP.R_WR);
+    const LEb=sel(kps,KP.L_ELB), REb=sel(kps,KP.R_ELB);
+
+    const torsoL = torsoIncline(LE, LH), torsoR = torsoIncline(RE, RH);
+    const torso  = (torsoL!=null && torsoR!=null) ? (torsoL+torsoR)/2 : (torsoL ?? torsoR);
+
+    if (ex === 'squat' || ex === 'lunge') {
+      // 동일 특징 사용
+      const l_knee=degAngle(LH,LK,LA), r_knee=degAngle(RH,RK,RA);
+      const l_hip =degAngle(LE,LH,LK),  r_hip =degAngle(RE,RH,RK);
+      const feats=[l_knee,r_knee,l_hip,r_hip,torso];
+      if (feats.some(v=>v==null)) return null;
+      return feats.map(v=>Math.max(0,Math.min(180,v)));
+    }
+    if (ex === 'arm_raise') {
+      // 팔 외전
+      const l_arm=degAngle(LE,LEb,LW), r_arm=degAngle(RE,REb,RW);
+      const l_hip =degAngle(LE,LH,LK), r_hip=degAngle(RE,RH,RK);
+      const feats=[l_arm,r_arm,l_hip,r_hip,torso];
+      if (feats.some(v=>v==null)) return null;
+      return feats.map(v=>Math.max(0,Math.min(180,v)));
+    }
+    if (ex === 'knee_ext') {
+      // 무릎 신전
+      const l_knee=degAngle(LH,LK,LA), r_knee=degAngle(RH,RK,RA);
+      const l_hip =degAngle(LE,LH,LK),  r_hip =degAngle(RE,RH,RK);
+      const hipAvg = (l_hip!=null && r_hip!=null)? (l_hip+r_hip)/2 : (l_hip ?? r_hip);
+      const feats=[l_knee,r_knee,hipAvg,torso,(l_hip??0)];
+      if (feats.slice(0,4).some(v=>v==null)) return null;
+      return feats.map(v=>Math.max(0,Math.min(180,v)));
+    }
+    return null;
+  }
+
+  // ================== 샘플 저장(동작별 key) ==================
+  function keyFor(ex){ return `rehab_${ex}_samples_v1`; }
+  function loadSamples(ex){ try{ const o=JSON.parse(localStorage.getItem(keyFor(ex))||'{}'); return {good:o.good||[], bad:o.bad||[]}; }catch{ return {good:[], bad:[]} } }
+  function saveSamples(ex, obj){ localStorage.setItem(keyFor(ex), JSON.stringify(obj)); }
+  function addSample(ex, type, feat){
+    const s = loadSamples(ex);
+    s[type] = [...s[type], feat].slice(-MAX_SAMPLES);
+    saveSamples(ex, s);
+    updateCounts();
+  }
+  function clearSamples(ex){ saveSamples(ex, {good:[], bad:[]}); updateCounts(); }
+
+  // ================== UI/상태 ==================
+  const video = document.getElementById('video');
+  const canvas= document.getElementById('canvas');
+  const ctx    = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const debugEl  = document.getElementById('debug');
+  const exSel    = document.getElementById('exercise');
+  const btnG     = document.getElementById('btn-good');
+  const btnB     = document.getElementById('btn-bad');
+  const btnR     = document.getElementById('btn-reset');
+  const cntG     = document.getElementById('cnt-good');
+  const cntB     = document.getElementById('cnt-bad');
+  const exTag    = document.getElementById('ex-tag');
+
+  let detector;
+  let EX = localStorage.getItem('last_ex') || 'squat';
+  exSel.value = EX;
+  exTag.textContent = exSel.options[exSel.selectedIndex].text;
+
+  function setStatus(text, tone='ghost'){
+    statusEl.className = `status ${tone}`;
+    statusEl.textContent = text;
+  }
+  function updateCounts(){
+    const s = loadSamples(EX);
+    cntG.textContent = s.good.length;
+    cntB.textContent = s.bad.length;
+  }
+
+  // ================== 카메라/스케일 ==================
+  async function setupCam(){
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:1280, height:720 }, audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+    // 캔버스 크기(16:9)
+    const W = Math.min(720, document.querySelector('.card').clientWidth - 28);
+    const H = Math.round(W * 9 / 16);
+    canvas.width = W; canvas.height = H;
+    // 원해상도(스케일 보정용)
+    window._vW = video.videoWidth;
+    window._vH = video.videoHeight;
+  }
+
+  // ================== 드로잉 ==================
+  function drawSkeleton(kps){
+    const E = [
+      [KP.L_SHO,KP.R_SHO],
+      [KP.L_SHO,KP.L_ELB],[KP.L_ELB,KP.L_WR],
+      [KP.R_SHO,KP.R_ELB],[KP.R_ELB,KP.R_WR],
+      [KP.L_SHO,KP.L_HIP],[KP.R_SHO,KP.R_HIP],
+      [KP.L_HIP,KP.R_HIP],
+      [KP.L_HIP,KP.L_KNEE],[KP.L_KNEE,KP.L_ANK],
+      [KP.R_HIP,KP.R_KNEE],[KP.R_KNEE,KP.R_ANK]
+    ];
+    ctx.lineWidth=3; ctx.strokeStyle='#7fb0ff';
+    E.forEach(([a,b])=>{
+      const pa=kps[a], pb=kps[b];
+      if(pa&&pb&&(pa.score??0)>CONF_THR&&(pb.score??0)>CONF_THR){
+        ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke();
+      }
+    });
+    kps.forEach(p=>{
+      if(p && (p.score??0)>CONF_THR){
+        ctx.beginPath(); ctx.fillStyle='#ffd166'; ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill();
+      }
+    });
+  }
+
+  // ================== 판정 ==================
+  function judge(ex, feat){
+    const s = loadSamples(ex);
+    const dG = s.good.length? Math.min(...s.good.map(g=>MAE(feat,g))) : 1e9;
+    const dB = s.bad.length ? Math.min(...s.bad.map(b=>MAE(feat,b)))  : 1e9;
+    if(s.good.length===0 && s.bad.length===0)
+      return { text:'샘플을 먼저 저장하세요 (G/B)', tone:'warn', dG, dB };
+    if(dG <= THR_GOOD && dG + MARGIN < dB)
+      return { text:'올바른 자세입니다! 계속하세요!', tone:'ok', dG, dB };
+    return { text:'틀린 자세입니다. 자세를 바꿔주세요!', tone:'bad', dG, dB };
+  }
+
+  function scaleKeypoints(pose){
+    const vW = window._vW || video.videoWidth || canvas.width;
+    const vH = window._vH || video.videoHeight || canvas.height;
+    const sx = canvas.width  / vW;
+    const sy = canvas.height / vH;
+    return pose.keypoints.map(k=>({ x:k.x*sx, y:k.y*sy, score:k.score ?? k.confidence ?? 0 }));
+  }
+
+  async function loop(){
+    // 배경(비디오) 그리기
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // 포즈 추정 (여러 명)
+    const poses = await detector.estimatePoses(video, {
+      flipHorizontal:false, maxPoses: MAX_POSES, scoreThreshold:0.25, nmsRadius:20
+    });
+
+    if (!poses || poses.length === 0) {
+      setStatus('사람을 찾지 못했습니다.', 'ghost');
+      debugEl.textContent = '';
+      requestAnimationFrame(loop); return;
+    }
+    if (poses.length !== 1) {
+      setStatus('사람이 여러명 있습니다. 화면에 한명만 나오게 해주세요.', 'warn');
+      const kAll = poses.map(scaleKeypoints);
+      ctx.save(); ctx.globalAlpha = 0.8; kAll.forEach(kps => drawSkeleton(kps)); ctx.restore();
+      debugEl.textContent = `detect: ${poses.length} persons`;
+      requestAnimationFrame(loop); return;
+    }
+
+    // 정확히 1명일 때만 판정
+    const kps = scaleKeypoints(poses[0]);
+    drawSkeleton(kps);
+
+    const feat = featuresByExercise(EX, kps);
+    if (!feat) {
+      setStatus('관절 신뢰도가 낮습니다. 전신이 보이게 서 주세요.', 'ghost');
+      debugEl.textContent = '';
+      requestAnimationFrame(loop); return;
+    }
+
+    const v = judge(EX, feat);
+    setStatus(v.text, v.tone);
+    debugEl.textContent = `운동:${exSel.options[exSel.selectedIndex].text} | d_good:${v.dG?.toFixed?.(1) ?? '-'}  d_bad:${v.dB?.toFixed?.(1) ?? '-'} | feat=${feat.map(x=>x.toFixed(0)).join(', ')}`;
+
+    requestAnimationFrame(loop);
+  }
+
+  // ================== 이벤트/부가 ==================
+  async function saveSample(type){
+    const poses = await detector.estimatePoses(video, { flipHorizontal:false, maxPoses: MAX_POSES });
+    if (!poses || poses.length !== 1) { setStatus('샘플 저장 실패: 화면에 한 명만 나오게 해주세요.', 'warn'); return; }
+    const kps = scaleKeypoints(poses[0]);
+    const feat = featuresByExercise(EX, kps);
+    if (!feat) { setStatus('샘플 저장 실패: 관절 신뢰도 낮음', 'warn'); return; }
+    addSample(EX, type, feat);
+    setStatus(type==='good' ? '좋은 샘플 저장 완료' : '나쁜 샘플 저장 완료', 'ghost');
+  }
+
+  // 버튼/키
+  const ESTART = async ()=>{
+    try{
+      if (isMobile) return; // 모바일 차단 중
+      await setupCam();
+      detector = await poseDetection.createDetector(MODEL, DETECTOR_CONFIG);
+      updateCounts();
+      setStatus('카메라 준비 완료 – 운동을 선택하고 샘플(G/B)을 몇 장 저장하세요', 'ghost');
+      loop();
+    }catch(err){
+      console.error(err);
+      setStatus('초기화 실패: ' + err.message, 'bad');
+    }
+  };
+  document.getElementById('btn-good').onclick = ()=> saveSample('good');
+  document.getElementById('btn-bad').onclick  = ()=> saveSample('bad');
+  document.getElementById('btn-reset').onclick= ()=> { clearSamples(EX); setStatus('샘플 초기화 완료', 'ghost'); };
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='g'||e.key==='G') document.getElementById('btn-good').click();
+    if(e.key==='b'||e.key==='B') document.getElementById('btn-bad').click();
+    if(e.key==='r'||e.key==='R') document.getElementById('btn-reset').click();
+  });
+  document.getElementById('exercise').addEventListener('change', ()=>{
+    EX = document.getElementById('exercise').value;
+    localStorage.setItem('last_ex', EX);
+    updateCounts();
+    const label = document.getElementById('exercise').options[document.getElementById('exercise').selectedIndex].text;
+    document.getElementById('ex-tag').textContent = label;
+    setStatus(`운동 변경: ${label}`, 'ghost');
+  });
+
+  // 시작
+  ESTART();
+  </script>
+</body>
+</html>
