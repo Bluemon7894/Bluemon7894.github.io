@@ -27,7 +27,6 @@
   @media (max-width:1024px){.grid{grid-template-columns:1fr}}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--round);box-shadow:var(--shadow)}
   .card-body{padding:16px}
-  /* 캔버스는 JS에서 원본 비율로 동적 리사이즈 */
   #canvas{width:100%;height:auto;border-radius:14px;background:#000;display:block}
   #video{display:none}
   .stage-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -89,10 +88,9 @@
             <div>
               <label for="exercise">운동 선택</label><br/>
               <select id="exercise">
-                <option value="squat">스쿼트</option>
                 <option value="lunge">런지</option>
-                <option value="arm_raise">팔 올리기</option>
                 <option value="knee_ext">무릎 신전</option>
+                <option value="sit_to_stand">앉았다 일어나기</option>
               </select>
             </div>
             <div class="row" style="gap:6px">
@@ -129,7 +127,7 @@
       </div>
       <div class="credit">
         <div class="row-spread">
-          <div class="muted">현재 운동: <span class="tag" id="ex-tag">스쿼트</span></div>
+          <div class="muted">현재 운동: <span class="tag" id="ex-tag">런지</span></div>
           <div class="muted">샘플: <span class="tag">기본 + 사용자(localStorage)</span></div>
         </div>
       </div>
@@ -155,29 +153,53 @@
   const statusEl = $('#status'), toast=$('#toast');
   const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const video=$('#video'), canvas=$('#canvas'), ctx=canvas.getContext('2d');
-  const container = canvas.parentElement;  // 크기 기준
+  const container = canvas.parentElement;
 
   function setStatus(t,tone=''){ statusEl.className='status '+tone; statusEl.innerHTML=(tone?'':'<span class="spin"></span>')+t; }
   function showToast(t,ms=1500){ toast.textContent=t; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>toast.classList.remove('show'),ms); }
   if(isMobile) $('#starter').style.display='flex'; else $('#starter').style.display='none';
   if(isMobile) $('#flipCam').style.display='inline-block';
 
-  /* ===== 기본 샘플(중략: 그대로 유지) ===== */
-  const DEFP={squat:{good:{LK:[105,15],RK:[105,15],LH:[85,15],RH:[85,15],T:[35,12]},bad:{LK:[50,15],RK:[50,15],LH:[40,15],RH:[40,15],T:[10,8]}},
-              lunge:{good:{LK:[95,15],RK:[95,15],LH:[80,15],RH:[80,15],T:[25,10]},bad:{LK:[40,15],RK:[140,15],LH:[30,15],RH:[120,15],T:[5,8]}},
-              arm_raise:{good:{LK:[90,15],RK:[90,15],LH:[165,12],RH:[165,12],T:[8,6]},bad:{LK:[20,20],RK:[20,20],LH:[150,20],RH:[150,20],T:[25,12]}},
-              knee_ext:{good:{LK:[175,6],RK:[175,6],LH:[170,8],RH:[170,8],T:[8,6]},bad:{LK:[120,20],RK:[120,20],LH:[130,20],RH:[130,20],T:[25,12]}}};
+  /* ===== 기본 샘플 ===== */
+  const DEFP={
+    lunge:{
+      good:{LK:[95,15],RK:[95,15],LH:[80,15],RH:[80,15],T:[25,10]},
+      bad :{LK:[40,15],RK:[140,15],LH:[30,15],RH:[120,15],T:[5,8]}
+    },
+    knee_ext:{ // 옆에서 본 무릎 완신전 + 상체 직립
+      good:{LK:[175,6],RK:[175,6],LH:[170,8],RH:[170,8],T:[8,6]},
+      bad :{LK:[120,20],RK:[120,20],LH:[130,20],RH:[130,20],T:[25,12]}
+    },
+    sit_to_stand:{ // (중간자세) 무릎/엉덩이 굴곡이 어느 정도 있는 구간
+      good:{LK:[95,18],RK:[95,18],LH:[85,15],RH:[85,15],T:[20,10]},
+      bad :{LK:[45,18],RK:[45,18],LH:[45,18],RH:[45,18],T:[5,8]}
+    }
+  };
+
+  // ⬇️ 서 있는 자세(옆) 클러스터 — good 에 추가할 별도 중심값
+  const STS_STAND = {LK:[175,8], RK:[175,8], LH:[170,10], RH:[170,10], T:[8,6]};
+
   const clamp=v=>Math.max(0,Math.min(180,v));
-  function expand(spec,k=3){const R=([c,d])=>k===1?[c]:(k===2?[c-d,c+d]:[c-d,c,c+d]);const A=R(spec.LK),B=R(spec.RK),C=R(spec.LH),D=R(spec.RH),E=R(spec.T),out=[];
-    for(const a of A)for(const b of B)for(const c of C)for(const d of D)for(const e of E) out.push([clamp(a),clamp(b),clamp(c),clamp(d),clamp(e)]);return dedup(out,3.0)}
+  function expand(spec,k=3){
+    const R=([c,d])=>k===1?[c]:(k===2?[c-d,c+d]:[c-d,c,c+d]);
+    const A=R(spec.LK),B=R(spec.RK),C=R(spec.LH),D=R(spec.RH),E=R(spec.T),out=[];
+    for(const a of A)for(const b of B)for(const c of C)for(const d of D)for(const e of E)
+      out.push([clamp(a),clamp(b),clamp(c),clamp(d),clamp(e)]);
+    return dedup(out,3.0)
+  }
   function dedup(list,thr){const o=[];list.forEach(v=>{const same=o.some(u=>v.reduce((s,x,i)=>s+Math.abs(x-u[i]),0)/v.length<thr);if(!same)o.push(v)});return o}
-  const DEFAULT_SAMPLES=['squat','lunge','arm_raise','knee_ext'].reduce((a,e)=>(a[e]={good:expand(DEFP[e].good,3),bad:expand(DEFP[e].bad,2)},a),{});
+
+  const DEFAULT_SAMPLES=['lunge','knee_ext','sit_to_stand']
+    .reduce((a,e)=>(a[e]={good:expand(DEFP[e].good,3),bad:expand(DEFP[e].bad,2)},a),{});
+  // 👉 앉았다 일어나기: “서 있는 자세(옆)”를 good에 추가
+  DEFAULT_SAMPLES.sit_to_stand.good.push(...expand(STS_STAND,3));
 
   /* ===== 상태/파라미터 ===== */
-  const cntG=$('#cnt-good'),cntB=$('#cnt-bad'),exSel=$('#exercise'),exTag=$('#ex-tag'),debugEl=$('#debug');
+  const cntG=$('#cnt-good'),cntB=$('#cnt-bad'),exSel=$('#exercise'),debugEl=$('#debug');
+  const exTagEl=$('#ex-tag');
   const KP={NOSE:0,L_EYE:1,R_EYE:2,L_EAR:3,R_EAR:4,L_SHO:5,R_SHO:6,L_ELB:7,R_ELB:8,L_WR:9,R_WR:10,L_HIP:11,R_HIP:12,L_KNEE:13,R_KNEE:14,L_ANK:15,R_ANK:16};
   const CONF_THR=.2,MAX_SAMPLES=250,THR_GOOD=8,MARGIN=2,MAX_POSES=isMobile?1:4;
-  let detector,EX=localStorage.getItem('last_ex')||'squat'; exSel.value=EX; exTag.textContent=exSel.options[exSel.selectedIndex].text;
+  let detector,EX=localStorage.getItem('last_ex')||'lunge'; exSel.value=EX;
 
   const key=e=>`rehab_${e}_samples_v1`;
   function loadRaw(e){try{const o=JSON.parse(localStorage.getItem(key(e))||'{}');return{good:o.good||[],bad:o.bad||[]}}catch{return{good:[],bad:[]}}}
@@ -192,49 +214,33 @@
   const deg=(a,b,c)=>{if(!a||!b||!c)return null;const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y],n1=Math.hypot(...v1),n2=Math.hypot(...v2);if(!n1||!n2)return null;let cos=(v1[0]*v2[0]+v1[1]*v2[1])/(n1*n2);cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI}
   const torso=(s,h)=>{if(!s||!h)return null;const vx=h.x-s.x,vy=h.y-s.y,n=Math.hypot(vx,vy);if(!n)return null;let cos=vy/n;cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI}
   const MAE=(a,b)=>a.reduce((s,v,i)=>s+Math.abs(v-b[i]),0)/a.length
-  const shoulderAbd=(hip,sho,wri)=>deg(hip,sho,wri);
 
-  /* ===== 비디오 그리기: cover + 좌표 변환 ===== */
+  /* ===== 비디오 드로잉 & 좌표 변환 ===== */
   let cover = {sx:0,sy:0,sw:1,sh:1,dw:1,dh:1,scale:1};
   function computeCover(dw,dh,vw,vh){
     const s = Math.max(dw/vw, dh/vh);
     const sw = dw/s, sh = dh/s;
     const sx = (vw - sw)/2, sy = (vh - sh)/2;
-    cover = {sx,sy,sw,sh,dw,dh,scale:(dw/sw)}; // scale = 화면/원본(크롭후) 비율
+    cover = {sx,sy,sw,sh,dw,dh,scale:(dw/sw)};
     return cover;
   }
-  function drawVideoCover(){
-    const {sx,sy,sw,sh,dw,dh} = cover;
-    ctx.drawImage(video, sx,sy,sw,sh, 0,0,dw,dh);
-  }
+  function drawVideoCover(){ const {sx,sy,sw,sh,dw,dh} = cover; ctx.drawImage(video, sx,sy,sw,sh, 0,0,dw,dh); }
   function mapKeypoints(pose){
     const k = pose.keypoints;
-    const out = k.map(p=>{
-      const x = (p.x - cover.sx) * cover.scale;
-      const y = (p.y - cover.sy) * cover.scale;
-      return {x,y,score:p.score ?? p.confidence ?? 0};
-    });
-    return out;
+    return k.map(p=>({ x:(p.x - cover.sx) * cover.scale, y:(p.y - cover.sy) * cover.scale, score:p.score ?? p.confidence ?? 0 }));
   }
-
   function draw(k){ctx.lineWidth=3;ctx.strokeStyle='#84b6ff';
     const E=[[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
     E.forEach(([a,b])=>{const pa=k[a],pb=k[b];if(pa&&pb&&(pa.score??0)>0.2&&(pb.score??0)>0.2){ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke()}});
     k.forEach(p=>{if(p&&(p.score??0)>0.2){ctx.beginPath();ctx.fillStyle='#ffd166';ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill()}});
   }
 
-  /* ===== 캔버스 리사이즈: 비디오 비율에 맞춤 ===== */
+  /* ===== 캔버스 리사이즈 ===== */
   function resizeCanvasToVideo(){
     const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
-    // 가용 폭
     const cw = container.clientWidth;
-    // 원본 비율로 높이 설정 (세로 화면에서도 찌부 방지)
     let ch = Math.round(cw * vh / vw);
-    // 모바일에서 너무 길게 늘어지지 않게 화면 높이의 70%를 상한으로
-    if(isMobile){
-      const maxH = Math.round(window.innerHeight * 0.7);
-      if(ch > maxH) ch = maxH;
-    }
+    if(isMobile){ const maxH = Math.round(window.innerHeight * 0.7); if(ch > maxH) ch = maxH; }
     canvas.width = cw; canvas.height = ch;
     computeCover(canvas.width, canvas.height, vw, vh);
   }
@@ -251,48 +257,49 @@
     await new Promise((resolve)=>{ let done=false; const ok=()=>{if(done)return; done=true; resolve()};
       setTimeout(ok,5000); video.addEventListener('loadedmetadata',ok,{once:true}); video.addEventListener('canplay',ok,{once:true});
       video.play().then(ok).catch(()=>{video.muted=true; video.play().then(ok).catch(()=>{})}); });
-    resizeCanvasToVideo(); // 비디오 메타 준비 후 크기 맞추기
+    resizeCanvasToVideo();
   }
   async function initDetector(){ await tf.setBackend('webgl'); await tf.ready();
     const modelType=isMobile?'SinglePose.Lightning':'MultiPose.Lightning';
     detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType});
   }
 
-  /* ===== 판정 ===== */
+  /* ===== 특징 벡터 ===== */
   function feats(ex,k){
-    const LE=sel(k,KP.L_SHO), RE=sel(k,KP.R_SHO),
-          LH=sel(k,KP.L_HIP), RH=sel(k,KP.R_HIP),
-          LK=sel(k,KP.L_KNEE), RK=sel(k,KP.R_KNEE),
-          LA=sel(k,KP.L_ANK),  RA=sel(k,KP.R_ANK),
-          LW=sel(k,KP.L_WR),   RW=sel(k,KP.R_WR);
+    const LE=k[5], RE=k[6], LH=k[11], RH=k[12], LK=k[13], RK=k[14], LA=k[15], RA=k[16];
     const tL=torso(LE,LH), tR=torso(RE,RH), T=(tL!=null&&tR!=null)?(tL+tR)/2:(tL??tR);
+    const deg3=(a,b,c)=>{if(!a||!b||!c)return null;const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const n1=Math.hypot(...v1),n2=Math.hypot(...v2);if(!n1||!n2)return null;let cos=(v1[0]*v2[0]+v1[1]*v2[1])/(n1*n2);cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI};
 
-    if(ex==='squat'||ex==='lunge'){
-      const f=[deg(LH,LK,LA),deg(RH,RK,RA),deg(LE,LH,LK),deg(RE,RH,RK),T];
+    if(ex==='lunge'){
+      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),deg3(LE,LH,LK),deg3(RE,RH,RK),T];
       if(f.some(v=>v==null)) return null; return f.map(clamp);
     }
-    if(ex==='arm_raise'){
-      const f=[shoulderAbd(LH,LE,LW), shoulderAbd(RH,RE,RW), 165,165, T];
-      if(f.slice(0,2).some(v=>v==null)||T==null) return null; return f.map(clamp);
-    }
     if(ex==='knee_ext'){
-      const Lh=deg(LE,LH,LK), Rh=deg(RE,RH,RK), Hip=(Lh!=null&&Rh!=null)?(Lh+Rh)/2:(Lh??Rh);
-      const f=[deg(LH,LK,LA),deg(RH,RK,RA),Hip,T,(Lh??0)];
+      const Lh=deg3(LE,LH,LK), Rh=deg3(RE,RH,RK), Hip=(Lh!=null&&Rh!=null)?(Lh+Rh)/2:(Lh??Rh);
+      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),Hip,T,(Lh??0)];
       if(f.slice(0,4).some(v=>v==null)) return null; return f.map(clamp);
+    }
+    if(ex==='sit_to_stand'){
+      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),deg3(LE,LH,LK),deg3(RE,RH,RK),T];
+      if(f.some(v=>v==null)) return null; return f.map(clamp);
     }
     return null;
   }
-  function judge(ex,f){const s=loadAll(ex);const dG=s.good.length?Math.min(...s.good.map(g=>MAE(f,g))):1e9;const dB=s.bad.length?Math.min(...s.bad.map(b=>MAE(f,b))):1e9;
+
+  function judge(ex,f){
+    const s=loadAll(ex);
+    const MAE=(a,b)=>a.reduce((sum,v,i)=>sum+Math.abs(v-b[i]),0)/a.length;
+    const dG=s.good.length?Math.min(...s.good.map(g=>MAE(f,g))):1e9;
+    const dB=s.bad.length?Math.min(...s.bad.map(b=>MAE(f,b))):1e9;
     if(!s.good.length&&!s.bad.length) return {t:'샘플을 먼저 저장하세요 (G/B)',tone:'warn',dG,dB};
     if(dG<=THR_GOOD && dG+MARGIN<dB) return {t:'올바른 자세입니다! 계속하세요!',tone:'ok',dG,dB};
-    return {t:'틀린 자세입니다. 자세를 바꿔주세요!',tone:'bad',dG,dB};}
+    return {t:'틀린 자세입니다. 자세를 바꿔주세요!',tone:'bad',dG,dB};
+  }
   let ema=null; const ALPHA=.35;
 
   async function loop(){
     try{
-      // 배경 비디오(cover)
       drawVideoCover();
-
       const poses=await detector.estimatePoses(video,{flipHorizontal:false,maxPoses:MAX_POSES,scoreThreshold:.25,nmsRadius:20});
       if(!poses?.length){setStatus('사람을 찾지 못했습니다. 전신이 나오게 서주세요.','warn');debugEl.textContent='';return requestAnimationFrame(loop)}
       if(!isMobile && poses.length!==1){setStatus('사람이 여러명 있습니다. 한 명만 나오게 해주세요.','warn');
@@ -304,7 +311,8 @@
       ema=(ema==null)?(v.tone==='ok'?1:0):(ALPHA*(v.tone==='ok'?1:0)+(1-ALPHA)*ema);
       const tone=ema>0.6?'ok':(ema<0.4?'bad':v.tone);
       setStatus(v.t,tone);
-      debugEl.textContent=`운동:${exSel.options[exSel.selectedIndex].text} • dG:${v.dG?.toFixed?.(1)??'-'} • dB:${v.dB?.toFixed?.(1)??'-'} • baseG:${DEFAULT_SAMPLES[EX].good.length} baseB:${DEFAULT_SAMPLES[EX].bad.length}`;
+      const base = DEFAULT_SAMPLES[EX];
+      debugEl.textContent=`운동:${exSel.options[exSel.selectedIndex].text} • dG:${v.dG?.toFixed?.(1)??'-'} • dB:${v.dB?.toFixed?.(1)??'-'} • baseG:${base.good.length} baseB:${base.bad.length}`;
     }catch(e){console.error(e);setStatus('추론 오류: '+(e?.message||e),'bad')}
     requestAnimationFrame(loop);
   }
@@ -331,7 +339,7 @@
   $('#btn-bad').onclick =()=>snap('bad');
   $('#btn-reset').onclick=()=>{ clearS(EX); showToast('사용자 샘플만 초기화 완료'); updateCounts(); };
   window.addEventListener('keydown',e=>{ if(e.key==='g'||e.key==='G')$('#btn-good').click(); if(e.key==='b'||e.key==='B')$('#btn-bad').click(); if(e.key==='r'||e.key==='R')$('#btn-reset').click(); });
-  exSel.addEventListener('change',()=>{ EX=exSel.value; localStorage.setItem('last_ex',EX); updateCounts(); $('#ex-tag').textContent=exSel.options[exSel.selectedIndex].text; ema=null; showToast('운동 변경'); });
+  exSel.addEventListener('change',()=>{ EX=exSel.value; localStorage.setItem('last_ex',EX); updateCounts(); ema=null; showToast('운동 변경'); });
 
   async function snap(type){
     const poses=await detector.estimatePoses(video,{flipHorizontal:false,maxPoses:MAX_POSES});
