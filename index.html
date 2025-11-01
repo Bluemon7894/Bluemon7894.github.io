@@ -52,8 +52,8 @@
   .tag{padding:4px 10px;border-radius:999px;background:#111b2a;border:1px solid #294164;color:#9ecbff;font-weight:800}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:#0f1627;border:1px solid #2a3b58;border-radius:12px;padding:10px 14px;color:#cfe2ff;box-shadow:var(--shadow);transition:all .28s ease;z-index:40;font-weight:800}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-  #starter{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#070a12ee;z-index:99}
-  #starter .panel{background:#0e1421f2;border:1px solid #25324b;border-radius:16px;padding:18px;box-shadow:var(--shadow);text-align:center}
+  #starter{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#070a12ee;z-index:99}
+  #starter .panel{background:#0e1421f2;border:1px solid #25324b;border-radius:16px;padding:18px;box-shadow:var(--shadow);text-align:center;max-width:420px}
   .spin{width:16px;height:16px;border-radius:50%;border:3px solid #2a3b58;border-top-color:#9ec5ff;display:inline-block;animation:rot .8s linear infinite;margin-right:6px}
   @keyframes rot{to{transform:rotate(360deg)}}
 </style>
@@ -65,7 +65,7 @@
         <img id="logo" src="helfit%20logo.png" alt="헬핏 로고">
       </a>
       <div class="chip">MoveNet (TF.js)</div>
-      <div id="status" class="status"><span class="spin"></span>초기화 중…</div>
+      <div id="status" class="status"><span class="spin"></span>시작 대기…</div>
     </div>
   </header>
 
@@ -108,7 +108,7 @@
 
           <div class="tip">
             <h4>설명</h4>
-            <div class="muted">카메라 → <b>MoveNet</b> 17 키포인트 → 동작별 <b>관절각 특징</b> → 내장 샘플(+사용자 샘플) 유사도 → 피드백.</div>
+            <div class="muted">카메라 → <b>MoveNet</b> 17 키포인트 → 동작별 <b>관절각 특징</b> → 샘플 유사도 → 피드백.</div>
           </div>
 
           <div class="mono" id="debug"></div>
@@ -120,9 +120,9 @@
       <div class="tip">
         <h4>데모 팁</h4>
         <ul class="muted" style="margin:6px 0 0 18px">
-          <li><b>한 명만</b> 화면에 나오게 해주세요. 여러 명 감지 시 판정을 멈춥니다(모바일은 1명 고정).</li>
-          <li><b>전신</b>이 보이도록 1.5~2m 거리에서 촬영하면 정확도가 좋아요.</li>
-          <li>동작마다 <b>G/B</b>로 몇 장 저장하면 <b>개인화</b>되어 더 정확해집니다.</li>
+          <li><b>한 명만</b> 화면에 나오게 해주세요.</li>
+          <li><b>전신</b>이 보이도록 1.5~2m 거리 권장.</li>
+          <li>동작마다 <b>G/B</b>로 몇 장 저장하면 개인화되어 더 정확해집니다.</li>
         </ul>
       </div>
       <div class="credit">
@@ -134,12 +134,13 @@
     </div>
   </div>
 
+  <!-- 시작 오버레이: 버튼으로만 시작 (자동 시작 제거) -->
   <div id="starter">
     <div class="panel">
       <h3 style="margin:0 0 8px">헬핏 재활 자세 데모</h3>
-      <p class="muted" style="margin:0 0 14px">카메라 권한을 허용하고 아래 버튼을 누르면 시작합니다.</p>
+      <p class="muted" style="margin:0 0 10px">카메라 권한을 허용하고 아래 버튼을 눌러 시작하세요.</p>
+      <div class="muted" id="hint" style="margin:0 0 14px; font-size:12px">HTTPS가 아닌 경우 브라우저가 카메라를 막을 수 있습니다.</div>
       <button id="btnStart" class="btn">카메라 시작</button>
-      <div class="muted" style="margin-top:8px;font-size:12px">문제가 지속되면 다른 브라우저(크롬/사파리)로 시도</div>
     </div>
   </div>
 
@@ -149,204 +150,237 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
 
   <script>
+  /* ===== 공통 ===== */
   const $ = s=>document.querySelector(s);
   const statusEl = $('#status'), toast=$('#toast');
   const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const video=$('#video'), canvas=$('#canvas'), ctx=canvas.getContext('2d');
   const container = canvas.parentElement;
+  $('#secureInfo').textContent='HTTPS: '+(window.isSecureContext?'OK':'필요');
 
   function setStatus(t,tone=''){ statusEl.className='status '+tone; statusEl.innerHTML=(tone?'':'<span class="spin"></span>')+t; }
   function showToast(t,ms=1500){ toast.textContent=t; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>toast.classList.remove('show'),ms); }
-  if(isMobile) $('#starter').style.display='flex'; else $('#starter').style.display='none';
-  if(isMobile) $('#flipCam').style.display='inline-block';
 
-  /* ===== 기본 샘플 ===== */
-  const DEFP={
-    lunge:{
-      good:{LK:[95,15],RK:[95,15],LH:[80,15],RH:[80,15],T:[25,10]},
-      bad :{LK:[40,15],RK:[140,15],LH:[30,15],RH:[120,15],T:[5,8]}
-    },
-    knee_ext:{ // 옆에서 본 무릎 완신전 + 상체 직립
-      good:{LK:[175,6],RK:[175,6],LH:[170,8],RH:[170,8],T:[8,6]},
-      bad :{LK:[120,20],RK:[120,20],LH:[130,20],RH:[130,20],T:[25,12]}
-    },
-    sit_to_stand:{ // (중간자세) 무릎/엉덩이 굴곡이 어느 정도 있는 구간
-      good:{LK:[95,18],RK:[95,18],LH:[85,15],RH:[85,15],T:[20,10]},
-      bad :{LK:[45,18],RK:[45,18],LH:[45,18],RH:[45,18],T:[5,8]}
-    }
-  };
+  /* ===== 시작/중복호출 방지 플래그 ===== */
+  let started=false, starting=false;   // ★ 핵심
+  let streamRef=null;                  // ★ 현재 스트림 보관
+  let detector=null;
 
-  // ⬇️ 서 있는 자세(옆) 클러스터 — good 에 추가할 별도 중심값
-  const STS_STAND = {LK:[175,8], RK:[175,8], LH:[170,10], RH:[170,10], T:[8,6]};
-
+  /* ===== 운동 샘플 ===== */
   const clamp=v=>Math.max(0,Math.min(180,v));
   function expand(spec,k=3){
     const R=([c,d])=>k===1?[c]:(k===2?[c-d,c+d]:[c-d,c,c+d]);
     const A=R(spec.LK),B=R(spec.RK),C=R(spec.LH),D=R(spec.RH),E=R(spec.T),out=[];
-    for(const a of A)for(const b of B)for(const c of C)for(const d of D)for(const e of E)
-      out.push([clamp(a),clamp(b),clamp(c),clamp(d),clamp(e)]);
+    for(const a of A)for(const b of B)for(const c of C)for(const d of D)for(const e of E) out.push([clamp(a),clamp(b),clamp(c),clamp(d),clamp(e)]);
     return dedup(out,3.0)
   }
   function dedup(list,thr){const o=[];list.forEach(v=>{const same=o.some(u=>v.reduce((s,x,i)=>s+Math.abs(x-u[i]),0)/v.length<thr);if(!same)o.push(v)});return o}
 
-  const DEFAULT_SAMPLES=['lunge','knee_ext','sit_to_stand']
-    .reduce((a,e)=>(a[e]={good:expand(DEFP[e].good,3),bad:expand(DEFP[e].bad,2)},a),{});
-  // 👉 앉았다 일어나기: “서 있는 자세(옆)”를 good에 추가
+  // 3개 동작만 유지
+  const DEFP={
+    lunge:{good:{LK:[95,15],RK:[95,15],LH:[80,15],RH:[80,15],T:[25,10]},bad:{LK:[40,15],RK:[140,15],LH:[30,15],RH:[120,15],T:[5,8]}},
+    knee_ext:{good:{LK:[175,6],RK:[175,6],LH:[170,8],RH:[170,8],T:[8,6]},bad:{LK:[120,20],RK:[120,20],LH:[130,20],RH:[130,20],T:[25,12]}},
+    sit_to_stand:{good:{LK:[95,18],RK:[95,18],LH:[85,15],RH:[85,15],T:[20,10]},bad:{LK:[45,18],RK:[45,18],LH:[45,18],RH:[45,18],T:[5,8]}}
+  };
+  // 서 있는 옆모습 good 클러스터 추가
+  const STS_STAND={LK:[175,8],RK:[175,8],LH:[170,10],RH:[170,10],T:[8,6]};
+
+  const DEFAULT_SAMPLES=['lunge','knee_ext','sit_to_stand'].reduce((a,e)=>(a[e]={good:expand(DEFP[e].good,3),bad:expand(DEFP[e].bad,2)},a),{});
   DEFAULT_SAMPLES.sit_to_stand.good.push(...expand(STS_STAND,3));
 
-  /* ===== 상태/파라미터 ===== */
-  const cntG=$('#cnt-good'),cntB=$('#cnt-bad'),exSel=$('#exercise'),debugEl=$('#debug');
-  const exTagEl=$('#ex-tag');
-  const KP={NOSE:0,L_EYE:1,R_EYE:2,L_EAR:3,R_EAR:4,L_SHO:5,R_SHO:6,L_ELB:7,R_ELB:8,L_WR:9,R_WR:10,L_HIP:11,R_HIP:12,L_KNEE:13,R_KNEE:14,L_ANK:15,R_ANK:16};
-  const CONF_THR=.2,MAX_SAMPLES=250,THR_GOOD=8,MARGIN=2,MAX_POSES=isMobile?1:4;
-  let detector,EX=localStorage.getItem('last_ex')||'lunge'; exSel.value=EX;
+  const exSel=$('#exercise'), exTag=$('#ex-tag'); let EX=localStorage.getItem('last_ex')||'lunge'; exSel.value=EX;
+  const cntG=$('#cnt-good'),cntB=$('#cnt-bad'),debugEl=$('#debug');
 
   const key=e=>`rehab_${e}_samples_v1`;
   function loadRaw(e){try{const o=JSON.parse(localStorage.getItem(key(e))||'{}');return{good:o.good||[],bad:o.bad||[]}}catch{return{good:[],bad:[]}}}
+  function saveRaw(e,o){localStorage.setItem(key(e),JSON.stringify(o))}
+  function addRaw(e,t,f){const s=loadRaw(e);s[t]=[...s[t],f].slice(-250);saveRaw(e,s);updateCounts()}
   function loadAll(e){const b=DEFAULT_SAMPLES[e]||{good:[],bad:[]},u=loadRaw(e);return{good:[...b.good,...u.good].slice(0,400),bad:[...b.bad,...u.bad].slice(0,300)}}
-  const save=(e,o)=>localStorage.setItem(key(e),JSON.stringify(o));
-  const add=(e,t,f)=>{const s=loadRaw(e);s[t]=[...s[t],f].slice(-MAX_SAMPLES);save(e,s);updateCounts()}
-  const clearS=e=>{save(e,{good:[],bad:[]});updateCounts()}
   function updateCounts(){const s=loadAll(EX);cntG.textContent=s.good.length;cntB.textContent=s.bad.length}
 
   /* ===== 기하/각도 ===== */
-  const sel=(k,i)=>{const p=k[i],s=p?.score??p?.confidence??0;return s<CONF_THR?null:{x:p.x,y:p.y,score:s}}
-  const deg=(a,b,c)=>{if(!a||!b||!c)return null;const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y],n1=Math.hypot(...v1),n2=Math.hypot(...v2);if(!n1||!n2)return null;let cos=(v1[0]*v2[0]+v1[1]*v2[1])/(n1*n2);cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI}
-  const torso=(s,h)=>{if(!s||!h)return null;const vx=h.x-s.x,vy=h.y-s.y,n=Math.hypot(vx,vy);if(!n)return null;let cos=vy/n;cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI}
-  const MAE=(a,b)=>a.reduce((s,v,i)=>s+Math.abs(v-b[i]),0)/a.length
+  const KP={NOSE:0,L_EYE:1,R_EYE:2,L_EAR:3,R_EAR:4,L_SHO:5,R_SHO:6,L_ELB:7,R_ELB:8,L_WR:9,R_WR:10,L_HIP:11,R_HIP:12,L_KNEE:13,R_KNEE:14,L_ANK:15,R_ANK:16};
+  const CONF_THR=.2,THR_GOOD=8,MARGIN=2,MAX_POSES=isMobile?1:4;
 
-  /* ===== 비디오 드로잉 & 좌표 변환 ===== */
-  let cover = {sx:0,sy:0,sw:1,sh:1,dw:1,dh:1,scale:1};
+  const sel=(k,i)=>{const p=k[i],s=p?.score??p?.confidence??0;return s<CONF_THR?null:{x:p.x,y:p.y,score:s}}
+  const deg3=(a,b,c)=>{if(!a||!b||!c)return null;const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y],n1=Math.hypot(...v1),n2=Math.hypot(...v2);if(!n1||!n2)return null;let cos=(v1[0]*v2[0]+v1[1]*v2[1])/(n1*n2);cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI}
+  const torso=(s,h)=>{if(!s||!h)return null;const vx=h.x-s.x,vy=h.y-s.y,n=Math.hypot(vx,vy);if(!n)return null;let cos=vy/n;cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI}
+  const MAE=(a,b)=>a.reduce((S,v,i)=>S+Math.abs(v-b[i]),0)/a.length
+
+  /* ===== 비디오 ===== */
+  let cover={sx:0,sy:0,sw:1,sh:1,dw:1,dh:1,scale:1};
   function computeCover(dw,dh,vw,vh){
     const s = Math.max(dw/vw, dh/vh);
     const sw = dw/s, sh = dh/s;
     const sx = (vw - sw)/2, sy = (vh - sh)/2;
     cover = {sx,sy,sw,sh,dw,dh,scale:(dw/sw)};
-    return cover;
   }
   function drawVideoCover(){ const {sx,sy,sw,sh,dw,dh} = cover; ctx.drawImage(video, sx,sy,sw,sh, 0,0,dw,dh); }
   function mapKeypoints(pose){
-    const k = pose.keypoints;
-    return k.map(p=>({ x:(p.x - cover.sx) * cover.scale, y:(p.y - cover.sy) * cover.scale, score:p.score ?? p.confidence ?? 0 }));
+    const k=pose.keypoints; return k.map(p=>({x:(p.x-cover.sx)*cover.scale,y:(p.y-cover.sy)*cover.scale,score:p.score??p.confidence??0}));
   }
   function draw(k){ctx.lineWidth=3;ctx.strokeStyle='#84b6ff';
     const E=[[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
     E.forEach(([a,b])=>{const pa=k[a],pb=k[b];if(pa&&pb&&(pa.score??0)>0.2&&(pb.score??0)>0.2){ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke()}});
     k.forEach(p=>{if(p&&(p.score??0)>0.2){ctx.beginPath();ctx.fillStyle='#ffd166';ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill()}});
   }
-
-  /* ===== 캔버스 리사이즈 ===== */
   function resizeCanvasToVideo(){
-    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
-    const cw = container.clientWidth;
-    let ch = Math.round(cw * vh / vw);
-    if(isMobile){ const maxH = Math.round(window.innerHeight * 0.7); if(ch > maxH) ch = maxH; }
-    canvas.width = cw; canvas.height = ch;
-    computeCover(canvas.width, canvas.height, vw, vh);
+    const vw=video.videoWidth||1280, vh=video.videoHeight||720;
+    const cw=container.clientWidth; let ch=Math.round(cw*vh/vw);
+    if(isMobile){const maxH=Math.round(window.innerHeight*0.7); if(ch>maxH) ch=maxH;}
+    canvas.width=cw; canvas.height=ch; computeCover(canvas.width,canvas.height,vw,vh);
   }
-  window.addEventListener('resize', ()=>{ if(video.srcObject) resizeCanvasToVideo(); });
-  window.addEventListener('orientationchange', ()=>{ setTimeout(()=>{ if(video.srcObject) resizeCanvasToVideo(); }, 250); });
+  window.addEventListener('resize', ()=>{ if(streamRef) resizeCanvasToVideo(); });
 
   /* ===== 모델/카메라 ===== */
   async function setupCam(facing='user'){
-    $('#secureInfo').textContent='HTTPS: '+(window.isSecureContext?'OK':'필요');
+    // 이미 스트림이 있으면 재요청 금지 (무한 허용 방지)
+    if(streamRef && streamRef.active) return;
+
     if(!navigator.mediaDevices?.getUserMedia) throw new Error('브라우저가 카메라 API를 지원하지 않음');
-    video.setAttribute('playsinline',''); video.setAttribute('webkit-playsinline',''); video.muted=true; video.autoplay=true;
     const constraints={video:{facingMode:facing,width:isMobile?640:1280,height:isMobile?360:720},audio:false};
-    const stream=await navigator.mediaDevices.getUserMedia(constraints); video.srcObject=stream;
-    await new Promise((resolve)=>{ let done=false; const ok=()=>{if(done)return; done=true; resolve()};
-      setTimeout(ok,5000); video.addEventListener('loadedmetadata',ok,{once:true}); video.addEventListener('canplay',ok,{once:true});
-      video.play().then(ok).catch(()=>{video.muted=true; video.play().then(ok).catch(()=>{})}); });
+
+    const stream=await navigator.mediaDevices.getUserMedia(constraints);
+    streamRef=stream; // ★ 전역 보관
+    video.srcObject=stream;
+    await new Promise((resolve)=>{
+      const ok=()=>resolve();
+      video.addEventListener('loadedmetadata',ok,{once:true});
+      video.addEventListener('canplay',ok,{once:true});
+      video.play().catch(()=>{}); // muted라 대부분 자동 재생 OK
+      setTimeout(ok,4000); // 드문 케이스 대비 타임아웃
+    });
     resizeCanvasToVideo();
   }
-  async function initDetector(){ await tf.setBackend('webgl'); await tf.ready();
+
+  async function initDetector(){
+    await tf.setBackend('webgl'); await tf.ready();
     const modelType=isMobile?'SinglePose.Lightning':'MultiPose.Lightning';
     detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType});
   }
 
-  /* ===== 특징 벡터 ===== */
+  /* ===== 특징/판정 ===== */
   function feats(ex,k){
-    const LE=k[5], RE=k[6], LH=k[11], RH=k[12], LK=k[13], RK=k[14], LA=k[15], RA=k[16];
-    const tL=torso(LE,LH), tR=torso(RE,RH), T=(tL!=null&&tR!=null)?(tL+tR)/2:(tL??tR);
-    const deg3=(a,b,c)=>{if(!a||!b||!c)return null;const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const n1=Math.hypot(...v1),n2=Math.hypot(...v2);if(!n1||!n2)return null;let cos=(v1[0]*v2[0]+v1[1]*v2[1])/(n1*n2);cos=Math.max(-1,Math.min(1,cos));return Math.acos(cos)*180/Math.PI};
+    const LE=sel(k,KP.L_SHO), RE=sel(k,KP.R_SHO),
+          LH=sel(k,KP.L_HIP), RH=sel(k,KP.R_HIP),
+          LK=sel(k,KP.L_KNEE), RK=sel(k,KP.R_KNEE),
+          LA=sel(k,KP.L_ANK),  RA=sel(k,KP.R_ANK);
+    const Tavg=(()=>{const tL=torso(LE,LH), tR=torso(RE,RH); return (tL!=null&&tR!=null)?(tL+tR)/2:(tL??tR)})();
 
     if(ex==='lunge'){
-      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),deg3(LE,LH,LK),deg3(RE,RH,RK),T];
+      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),deg3(LE,LH,LK),deg3(RE,RH,RK),Tavg];
       if(f.some(v=>v==null)) return null; return f.map(clamp);
     }
     if(ex==='knee_ext'){
       const Lh=deg3(LE,LH,LK), Rh=deg3(RE,RH,RK), Hip=(Lh!=null&&Rh!=null)?(Lh+Rh)/2:(Lh??Rh);
-      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),Hip,T,(Lh??0)];
+      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),Hip,Tavg,(Lh??0)];
       if(f.slice(0,4).some(v=>v==null)) return null; return f.map(clamp);
     }
     if(ex==='sit_to_stand'){
-      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),deg3(LE,LH,LK),deg3(RE,RH,RK),T];
+      const f=[deg3(LH,LK,LA),deg3(RH,RK,RA),deg3(LE,LH,LK),deg3(RE,RH,RK),Tavg];
       if(f.some(v=>v==null)) return null; return f.map(clamp);
     }
     return null;
   }
-
   function judge(ex,f){
     const s=loadAll(ex);
-    const MAE=(a,b)=>a.reduce((sum,v,i)=>sum+Math.abs(v-b[i]),0)/a.length;
     const dG=s.good.length?Math.min(...s.good.map(g=>MAE(f,g))):1e9;
     const dB=s.bad.length?Math.min(...s.bad.map(b=>MAE(f,b))):1e9;
     if(!s.good.length&&!s.bad.length) return {t:'샘플을 먼저 저장하세요 (G/B)',tone:'warn',dG,dB};
-    if(dG<=THR_GOOD && dG+MARGIN<dB) return {t:'올바른 자세입니다! 계속하세요!',tone:'ok',dG,dB};
+    if(dG<=8 && dG+MARGIN<dB) return {t:'올바른 자세입니다! 계속하세요!',tone:'ok',dG,dB};
     return {t:'틀린 자세입니다. 자세를 바꿔주세요!',tone:'bad',dG,dB};
   }
-  let ema=null; const ALPHA=.35;
 
+  let ema=null; const ALPHA=.35;
   async function loop(){
     try{
+      const s=streamRef;
+      if(!s || !detector){ setStatus('초기화 중…'); return requestAnimationFrame(loop); }
+
       drawVideoCover();
-      const poses=await detector.estimatePoses(video,{flipHorizontal:false,maxPoses:MAX_POSES,scoreThreshold:.25,nmsRadius:20});
+      const poses=await detector.estimatePoses(video,{flipHorizontal:false,maxPoses:isMobile?1:4,scoreThreshold:.25,nmsRadius:20});
       if(!poses?.length){setStatus('사람을 찾지 못했습니다. 전신이 나오게 서주세요.','warn');debugEl.textContent='';return requestAnimationFrame(loop)}
       if(!isMobile && poses.length!==1){setStatus('사람이 여러명 있습니다. 한 명만 나오게 해주세요.','warn');
         poses.forEach(p=>draw(mapKeypoints(p))); debugEl.textContent=`detect:${poses.length}`; return requestAnimationFrame(loop);}
       const k = mapKeypoints(poses[0]); draw(k);
 
-      const f=feats(EX,k); if(!f){setStatus('관절 신뢰도가 낮습니다. 전신이 보이게 서주세요.','warn');debugEl.textContent='';return requestAnimationFrame(loop)}
+      const f=feats(EX,k);
+      if(!f){setStatus('관절 신뢰도가 낮습니다. 전신이 보이게 서주세요.','warn');debugEl.textContent='';return requestAnimationFrame(loop)}
       const v=judge(EX,f);
       ema=(ema==null)?(v.tone==='ok'?1:0):(ALPHA*(v.tone==='ok'?1:0)+(1-ALPHA)*ema);
       const tone=ema>0.6?'ok':(ema<0.4?'bad':v.tone);
       setStatus(v.t,tone);
-      const base = DEFAULT_SAMPLES[EX];
-      debugEl.textContent=`운동:${exSel.options[exSel.selectedIndex].text} • dG:${v.dG?.toFixed?.(1)??'-'} • dB:${v.dB?.toFixed?.(1)??'-'} • baseG:${base.good.length} baseB:${base.bad.length}`;
-    }catch(e){console.error(e);setStatus('추론 오류: '+(e?.message||e),'bad')}
+      const all=loadAll(EX);
+      debugEl.textContent=`운동:${exSel.options[exSel.selectedIndex].text} • dG:${v.dG?.toFixed?.(1)??'-'} • dB:${v.dB?.toFixed?.(1)??'-'} • G:${all.good.length} B:${all.bad.length}`;
+    }catch(e){ console.error(e); setStatus('추론 오류: '+(e?.message||e),'bad'); }
     requestAnimationFrame(loop);
   }
 
-  async function start(){
+  /* ===== 시작 버튼으로만 실행 ===== */
+  $('#btnStart').onclick=async()=>{
+    if(started || starting) return;         // ★ 중복 방지
+    starting=true;
     try{
-      setStatus('카메라 연결 중…'); await setupCam();
+      if(!window.isSecureContext){
+        $('#hint').textContent='HTTPS가 아닙니다. 로컬 서버(예: VSCode Live Server, http-server) 또는 https 환경에서 실행하세요.';
+      }
+      setStatus('카메라 연결 중…'); await setupCam();           // ★ 최초 1회만 권한 요청
       setStatus('모델 로딩 중…');  await initDetector();
-      updateCounts(); setStatus('카메라 준비 완료 – 바로 시연 가능'); loop();
-    }catch(e){
-      console.error(e); setStatus('초기화 실패: '+(e?.message||e),'bad');
-      $('#starter').style.display='flex'; showToast('초기화 실패. 권한/HTTPS/보안 앱 확인');
+      $('#starter').style.display='none';
+      started=true; starting=false;
+      updateCounts(); setStatus('카메라 준비 완료 – 바로 시연 가능', ''); requestAnimationFrame(loop);
+    }catch(err){
+      starting=false; started=false;
+      console.error(err);
+      setStatus('초기화 실패: '+(err?.name||err?.message||err), 'bad');
+      // 권한 거부/차단 안내
+      const name = (err && err.name)||'';
+      const hint = $('#hint');
+      if(name==='NotAllowedError' || name==='SecurityError'){
+        hint.textContent = '카메라 권한이 거부/차단되었습니다. 주소창 자물쇠 ▶ 사이트 설정 ▶ 카메라 ▶ 허용으로 바꾼 뒤 다시 시도하세요.';
+      }else if(name==='NotFoundError'){
+        hint.textContent = '사용 가능한 카메라 장치를 찾지 못했습니다. 다른 장치/브라우저로 시도하세요.';
+      }else{
+        hint.textContent = '문제가 지속되면 다른 브라우저(크롬/사파리)로 시도하거나 HTTPS에서 실행하세요.';
+      }
+      $('#starter').style.display='flex';
     }
-  }
+  };
 
-  // 시작/이벤트
-  $('#btnStart').onclick=()=>{ $('#starter').style.display='none'; start(); };
-  if(!isMobile) start();
-
+  /* ===== 기타 UI ===== */
   let facing='user';
-  $('#flipCam').onclick=async()=>{ video.srcObject?.getTracks()?.forEach(t=>t.stop()); facing=(facing==='user')?'environment':'user'; await setupCam(facing); };
+  $('#flipCam').style.display = isMobile ? 'inline-block' : 'none';
+  $('#flipCam').onclick=async()=>{
+    if(!streamRef) return;
+    // 기존 트랙 정리
+    streamRef.getTracks().forEach(t=>t.stop());
+    streamRef=null;
+    facing=(facing==='user')?'environment':'user';
+    try{
+      setStatus('카메라 전환 중…');
+      await setupCam(facing);
+      setStatus('전환 완료');
+    }catch(e){ console.error(e); setStatus('전환 실패: '+(e?.message||e),'bad'); }
+  };
 
-  $('#btn-good').onclick=()=>snap('good');
-  $('#btn-bad').onclick =()=>snap('bad');
-  $('#btn-reset').onclick=()=>{ clearS(EX); showToast('사용자 샘플만 초기화 완료'); updateCounts(); };
-  window.addEventListener('keydown',e=>{ if(e.key==='g'||e.key==='G')$('#btn-good').click(); if(e.key==='b'||e.key==='B')$('#btn-bad').click(); if(e.key==='r'||e.key==='R')$('#btn-reset').click(); });
+  window.addEventListener('keydown',e=>{
+    if(e.key==='g'||e.key==='G')$('#btn-good').click();
+    if(e.key==='b'||e.key==='B')$('#btn-bad').click();
+    if(e.key==='r'||e.key==='R')$('#btn-reset').click();
+  });
   exSel.addEventListener('change',()=>{ EX=exSel.value; localStorage.setItem('last_ex',EX); updateCounts(); ema=null; showToast('운동 변경'); });
 
   async function snap(type){
-    const poses=await detector.estimatePoses(video,{flipHorizontal:false,maxPoses:MAX_POSES});
+    if(!detector) return;
+    const poses=await detector.estimatePoses(video,{flipHorizontal:false,maxPoses:isMobile?1:4});
     if(!poses?.length){showToast('사람이 인식되지 않습니다');return;}
-    const f=feats(EX, mapKeypoints(poses[0])); if(!f){showToast('관절 신뢰도 낮음');return;}
-    add(EX,type,f); showToast(type==='good'?'좋은 샘플 저장 완료':'나쁜 샘플 저장 완료');
+    const k = mapKeypoints(poses[0]);
+    const f=feats(EX,k); if(!f){showToast('관절 신뢰도 낮음');return;}
+    addRaw(EX,type,f); showToast(type==='good'?'좋은 샘플 저장 완료':'나쁜 샘플 저장 완료');
   }
+  $('#btn-good').onclick=()=>snap('good');
+  $('#btn-bad').onclick =()=>snap('bad');
+  $('#btn-reset').onclick=()=>{ saveRaw(EX,{good:[],bad:[]}); showToast('사용자 샘플 초기화 완료'); updateCounts(); };
   </script>
 </body>
 </html>
